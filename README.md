@@ -16,7 +16,7 @@ Built for hackers, pentesters, and curious minds — by **kaifcodec**.
 - 💻 Works on **Linux, Windows, and Termux**
 
 ---
-## 📦 Requirements (pyrthon packages)
+## 📦 Requirements (python packages)
 ```bash
 httpx
 colorama
