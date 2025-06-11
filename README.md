@@ -16,13 +16,24 @@ Built for hackers, pentesters, and curious minds — by **kaifcodec**.
 - 💻 Works on **Linux, Windows, and Termux**
 
 ---
+## 📦 Requirements (pyrthon packages)
+```bash
+httpx
+colorama
+```
 
 ## 📦 Install
 
 ```bash
-pip install httpx
+pip install -r requirements.txt
 ```
+Or for manual installation:
 
+```bash
+pip install httpx
+pip install colorama
+
+```
 ---
 
 ## 🔧 Usage
