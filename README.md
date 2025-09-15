@@ -38,13 +38,41 @@ pip install colorama
 
 ## 🔧 Usage
 
+### Main script
 ```bash
 cd ApiBrute
 python apibrute.py 
 ```
 `Then follow the on screen commands`
 
-_Optional: Plug in your own wordlist — just modify the script._
+### Wordlist Generator 
+```bash
+cd ApiBrute/wordlist_generator
+python3 generate_worlist.py --help
+```
+```bash
+usage: generate_worlist.py [-h] [--verbs VERBS] [--nouns NOUNS] [--prefixes PREFIXES]
+                           [--versions VERSIONS] [--suffixes SUFFIXES] [--case CASE] [--no-plural]
+                           [--max MAX] [-o OUTPUT] [--seed SEED] [--tech TECH]
+
+Generate API endpoint wordlist with rich variations.
+
+options:
+  -h, --help            show this help message and exit
+  --verbs VERBS         Path to verbs file (one per line).
+  --nouns NOUNS         Path to nouns file (one per line).
+  --prefixes PREFIXES   Path to prefixes file.
+  --versions VERSIONS   Path to versions file.
+  --suffixes SUFFIXES   Path to suffixes file.
+  --case CASE           Comma list of case styles.
+  --no-plural           Disable noun pluralization.
+  --max MAX             Max patterns to emit.
+  -o OUTPUT, --output OUTPUT
+                        Output file.
+  --seed SEED           Path to seed endpoints to include (one per line).
+  --tech TECH           Comma list of tech hints (e.g., laravel,spring,django,express).
+```
+_Optional: Plug in your own wordlist · just modify the script._
 
 ---
 
