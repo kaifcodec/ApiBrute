@@ -49,6 +49,9 @@ python3 apibrute.py
 ```bash
 cd ApiBrute/wordlist_generator
 python3 generate_worlist.py --help
+# or only
+python3 generate_wordlist.py # for generating wordlist with pre defined sets inside the script
+
 ```
 ```bash
 usage: generate_worlist.py [-h] [--verbs VERBS] [--nouns NOUNS] [--prefixes PREFIXES]
