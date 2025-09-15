@@ -1,13 +1,21 @@
-import httpx
 import asyncio
+import httpx
 import os
 import time
-from colorama import Fore, Style, init
 import platform
-# Initialize Colorama for cross-platform terminal colors
+from collections import defaultdict, deque
+from colorama import Fore, Style, init
+import json
+from datetime import datetime  # ADDED
+
+base_dir = os.path.dirname(os.path.abspath(__file__))
+
+with open(os.path.join(base_dir, "version.json") , "r") as version_data:
+    version_file = json.load(version_data)
+
 init()
-current_version = "1.0.0"
-# Terminal colors using Colorama
+current_version = version_file.get("version")
+
 class Colors:
     GREEN = Fore.GREEN
     RED = Fore.RED
@@ -15,7 +23,6 @@ class Colors:
     YELLOW = Fore.YELLOW
     RESET = Style.RESET_ALL
 
-# Header for the script
 HEADER = rf"""
 {Colors.CYAN}
     _          _   ____             _
@@ -28,7 +35,6 @@ HEADER = rf"""
 {Colors.GREEN}Simple Async HTTP Endpoint Scanner by "kaifcodec"{Colors.RESET}
 """
 
-# Default wordlist content if the file is not found
 DEFAULT_WORDLIST_CONTENT = """
 admin
 login
@@ -37,6 +43,8 @@ index.php
 test
 api
 v1
+v2
+v3
 .git
 .env
 config.php
@@ -46,152 +54,108 @@ robots.txt
 sitemap.xml
 user
 public
-"""
+""".strip()
 
-# Function to clear the terminal screen
 def clear_screen():
-    # 'cls' for Windows, 'clear' for Unix/Linux/macOS
     os.system('cls' if os.name == 'nt' else 'clear')
-def detect_os():
-    """Detects and returns the operating system."""
-    sys_name = platform.system()
-    if sys_name == "Windows":
-        return "Windows"
-    elif sys_name == "Darwin":
-        return "macOS"
-    elif sys_name == "Linux":
-        if "ANDROID_ROOT" in os.environ or "TERMUX_VERSION" in os.environ:
-            return "Android (Termux/similar)"
-        elif "WSL_DISTRO_NAME" in os.environ:
-            return "Linux (WSL)"
-        elif os.path.exists("/etc/os-release"):
-            with open("/etc/os-release", "r") as f:
-                for line in f:
-                    if line.startswith("PRETTY_NAME="):
-                        return f"Linux ({line.split('=')[1].strip().strip('\"')})"
-        return "Linux"
-    elif sys_name == "FreeBSD":
-        return "FreeBSD"
-    elif sys_name == "OpenBSD":
-        return "OpenBSD"
-    elif sys_name == "NetBSD":
-        return "NetBSD"
-    elif sys_name == "SunOS":
-        return "SunOS (Solaris)"
-    return f"Unknown ({sys_name})"
-try:
-  action = detect_os()
-except Exception as err:
-  print(err)
-  pass
 
-def log_usage(action, current_version):
-    try:
-        # This tool collects your IP just to know how distinct users this tool got
-        # We ensure that your IP is kept safe in the backend database.
-        # If you don't want to share your IP you can comment out that action below.
-        ip = httpx.get("https://api.ipify.org").raise_for_status().text
-    except:
-        ip = "Unknown"
-        pass
-    payload = {
-        "name": "ApiBrute",
-        "function": action,
-        "ip" : ip,
-        "version": current_version,
-    }
-
-    try:
-        _response = httpx.post(
-            "https://tracker-api-od1b.onrender.com/log-error",
-            json=payload,
-            headers={"Content-Type": "application/json"},
-        ).raise_for_status()
-    except Exception as e:
-        print(e)
-        exit()
-
-
-# Function to load the wordlist from a specified path
 def load_wordlist(path):
     try:
-        # Check if the wordlist file exists
         if not os.path.exists(path):
             print(f"{Colors.YELLOW}[!] Wordlist file not found: {path}{Colors.RESET}")
             choice = input(f"{Colors.CYAN}[?]{Colors.RESET} Create a default wordlist at '{path}'? (y/n): ").strip().lower()
             if choice == 'y':
-                # Create the default wordlist if the user agrees
                 with open(path, 'w') as f:
-                    f.write(DEFAULT_WORDLIST_CONTENT.strip())
+                    f.write(DEFAULT_WORDLIST_CONTENT + "\n")
                 print(f"{Colors.GREEN}[+] Default wordlist created successfully.{Colors.RESET}")
             else:
-                return [] # Return empty list if user declines to create
-
-        # Read endpoints from the wordlist file
+                return []
         with open(path, 'r') as f:
             return [line.strip() for line in f if line.strip()]
     except Exception as e:
         print(f"{Colors.RED}[ERR] Error loading wordlist: {e}{Colors.RESET}")
         return []
 
-# Asynchronous function to check a single endpoint
-async def check_endpoint(session, semaphore, endpoint, rps_limit):
-    url = f"{BASE_URL}/{endpoint.lstrip('/')}"
-    # Acquire the semaphore to limit concurrent requests
+# Structured logging (queue + tickets)
+class LogEvent:
+    # type: 'start' or 'final' or 'plain'
+    def __init__(self, ev_type, ticket=None, text="", color="", newline=True):
+        self.ev_type = ev_type
+        self.ticket = ticket
+        self.text = text
+        self.color = color
+        self.newline = newline
+
+async def log_writer(queue):
+    last_text_by_ticket = {}
+    def write_line(s):
+        print(s, flush=True)
+    while True:
+        ev = await queue.get()
+        if ev is None:
+            break
+        if ev.ev_type == "plain":
+            write_line(f"{ev.color}{ev.text}{Colors.RESET}")
+        elif ev.ev_type == "start":
+            last_text_by_ticket[ev.ticket] = f"{ev.color}{ev.text}{Colors.RESET}"
+            # print the starting line
+            write_line(last_text_by_ticket[ev.ticket])
+        elif ev.ev_type == "final":
+            prev = last_text_by_ticket.get(ev.ticket, "")
+            write_line(f"{ev.color}{ev.text}{Colors.RESET}")
+            last_text_by_ticket.pop(ev.ticket, None)
+        queue.task_done()
+
+async def check_endpoint(session, semaphore, base_url, endpoint, rps_limit, queue, results_acc):
+    url = f"{base_url}/{endpoint.lstrip('/')}"
+    ticket = f"{time.time_ns()}-{endpoint}"
+
     async with semaphore:
-        start_time = time.time() # Record the start time of the request
-        print(f"{Colors.YELLOW}[~] Trying: {url}{Colors.RESET}")
+        start_time = time.time()
+        await queue.put(LogEvent("start", ticket=ticket, text=f"[~] Trying: {url}", color=Colors.YELLOW))
         try:
-            # Make the asynchronous HTTP GET request
-            res = await session.get(url, timeout=5, follow_redirects=False)
+            res = await session.get(url, timeout=5.0, follow_redirects=False)
             status = res.status_code
-
-            # Print status based on HTTP response code
             if status == 200:
-                print(f"{Colors.GREEN}[+] OPEN [{status}]: {url}{Colors.RESET}")
-            elif status in [301, 302]:
-                print(f"{Colors.CYAN}[>] REDIRECT [{status}]: {url}{Colors.RESET}")
-            elif status in [401, 403]:
-                print(f"{Colors.YELLOW}[!] FORBIDDEN [{status}]: {url}{Colors.RESET}")
+                await queue.put(LogEvent("final", ticket=ticket, text=f"[+] OPEN : {url}", color=Colors.GREEN))
+                results_acc["200"].append(url)
+            elif status in (301, 302, 307, 308):
+                await queue.put(LogEvent("final", ticket=ticket, text=f"[>] REDIRECT [{status}]: {url}", color=Colors.CYAN))
+                results_acc["3xx"].append(f"{url} -> {status}")
+            elif status in (401, 403):
+                await queue.put(LogEvent("final", ticket=ticket, text=f"[!] FORBIDDEN [{status}]: {url}", color=Colors.YELLOW))
+                results_acc["4xx_forbid"].append(f"{url} -> {status}")
             else:
-                print(f"{Colors.RED}[-] Not Found [{status}]: {url}{Colors.RESET}")
+                await queue.put(LogEvent("final", ticket=ticket, text=f"[-] Not Found [{status}]: {url}", color=Colors.RED))  # Do not store in results_acc
         except httpx.RequestError as e:
-            # Handle HTTPX request errors (e.g., network issues, timeouts)
-            print(f"{Colors.RED}[ERR] {url} → {e}{Colors.RESET}")
+            await queue.put(LogEvent("final", ticket=ticket, text=f"[ERR] {url} → {e}", color=Colors.RED))
         finally:
-            # Enforce Requests Per Second (RPS) limit
-            end_time = time.time() # Record the end time of the request
-            elapsed_time = end_time - start_time
+            elapsed = time.time() - start_time
             if rps_limit > 0:
-                # Calculate the delay needed to adhere to the RPS limit
-                delay_needed = (1.0 / rps_limit) - elapsed_time
+                delay_needed = (1.0 / rps_limit) - elapsed
                 if delay_needed > 0:
-                    await asyncio.sleep(delay_needed) # Pause if needed
+                    await asyncio.sleep(delay_needed)
 
-# Main asynchronous function to orchestrate the scanning process
 async def main():
-    clear_screen() # Clear screen for a clean interface
-    print(HEADER) # Display the script header
+    clear_screen()
+    print(HEADER)
 
-    # Get target URL from user
-    global BASE_URL # Declare BASE_URL as global to be accessible by check_endpoint
-    BASE_URL = input(f"{Colors.CYAN}[?]{Colors.RESET} Enter target URL (e.g., https://erp.example.com): ").strip().rstrip('/')
-    if not BASE_URL:
+    base_url = input(f"{Colors.CYAN}[?]{Colors.RESET} Enter target URL (e.g., https://erp.example.com): ").strip().rstrip('/')
+    if not base_url:
         print(f"{Colors.RED}[!] Target URL cannot be empty. Exiting...{Colors.RESET}")
         return
 
-    # Get wordlist path from user, with a default option
-    WORDLIST_PATH = input(f"{Colors.CYAN}[?]{Colors.RESET} Enter wordlist file path (Press enter for default 'wordlist.txt'): ").strip()
-    if not WORDLIST_PATH:
-        WORDLIST_PATH = "wordlist.txt"
+    wordlist_path = input(f"{Colors.CYAN}[?]{Colors.RESET} Enter wordlist file path {Colors.YELLOW}(Enter 0 for for using minimal wordlist.txt or 1 for all_in_one_wordlist.txt {Colors.RESET}: ").strip()
+    if wordlist_path == "0":
+        wordlist_path = os.path.join(base_dir, "wordlists", "wordlist.txt")
+    elif wordlist_path == "1":
+        wordlist_path = os.path.join(base_dir, "wordlists", "all_in_one_wordlist.txt")
 
-    endpoints = load_wordlist(WORDLIST_PATH)
-
+    endpoints = load_wordlist(wordlist_path)
     if not endpoints:
         print(f"{Colors.RED}[!] No endpoints to scan. Exiting...{Colors.RESET}")
         return
 
-    # Prompt for custom headers
     custom_headers = {}
     add_headers_choice = input(f"{Colors.CYAN}[?]{Colors.RESET} Do you want to add custom headers? (y/n): ").strip().lower()
     if add_headers_choice == 'y':
@@ -205,20 +169,17 @@ async def main():
                 custom_headers[key.strip()] = value.strip()
             else:
                 print(f"{Colors.RED}[!] Invalid header format. Use 'Key:Value'.{Colors.RESET}")
-    
-    # Define default headers
+
     default_headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.75 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.5",
         "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive"
+        "Connection": "keep-alive",
     }
-    # Merge custom headers with default headers, custom headers take precedence
+
     merged_headers = {**default_headers, **custom_headers}
 
-    # Get concurrency (max_workers) from user
-    max_workers = 10
     try:
         max_workers = int(input(f"{Colors.CYAN}[?]{Colors.RESET} Enter max concurrent requests (default: 10): ").strip() or "10")
         if max_workers <= 0:
@@ -226,45 +187,96 @@ async def main():
             max_workers = 10
     except ValueError:
         print(f"{Colors.RED}[!] Invalid input. Using default max concurrent requests (10).{Colors.RESET}")
+        max_workers = 10
 
-    # Get Requests Per Second (RPS) limit from user
-    rps_limit = 0
     try:
-        rps_limit = float(input(f"{Colors.CYAN}[?]{Colors.RESET} Enter requests per second limit (0 for no limit, default: 0): ").strip() or "0")
+        rps_limit_input = input(f"{Colors.CYAN}[?]{Colors.RESET} Enter requests per second limit (0 for no limit, press enter for default: 0): ").strip() or "0"
+        rps_limit = float(rps_limit_input)
         if rps_limit < 0:
             print(f"{Colors.RED}[!] RPS limit cannot be negative. Using no limit (0).{Colors.RESET}")
-            rps_limit = 0
+            rps_limit = 0.0
     except ValueError:
         print(f"{Colors.RED}[!] Invalid input. Using no RPS limit (0).{Colors.RESET}")
+        rps_limit = 0.0
 
-    # Display scan parameters
-    print(f"\n{Colors.CYAN} Starting scan on: {BASE_URL}{Colors.RESET}")
+    print(f"\n{Colors.CYAN} Starting scan on: {base_url}{Colors.RESET}")
     print(f"{Colors.CYAN} Concurrency: {max_workers}, RPS Limit: {rps_limit if rps_limit > 0 else 'No Limit'}{Colors.RESET}")
     print(f"{Colors.CYAN} Headers used: {merged_headers}{Colors.RESET}")
-    print(f"{Colors.CYAN} Total endpoints to scan: {len(endpoints)}{Colors.RESET}\n")
+    print(f"\n{Colors.GREEN} Total endpoints to scan: {len(endpoints)}{Colors.RESET}\n")
 
-    # Create an asynchronous HTTP client session with the merged headers
+    results_acc = {
+        "200": [],
+        "3xx": [],
+        "4xx_forbid": [],
+    }
+
+    queue = asyncio.Queue()
+    writer_task = asyncio.create_task(log_writer(queue))
+
     async with httpx.AsyncClient(headers=merged_headers) as session:
-        # Create a semaphore to limit the number of concurrent tasks
         semaphore = asyncio.Semaphore(max_workers)
-        
-        # Create a list of asynchronous tasks for each endpoint
         tasks = [
-            check_endpoint(session, semaphore, endpoint, rps_limit)
-            for endpoint in endpoints
+            check_endpoint(session, semaphore, base_url, ep, rps_limit, queue, results_acc)
+            for ep in endpoints
         ]
-        
-        # Run all tasks concurrently and wait for them to complete
-        await asyncio.gather(*tasks)
 
-    print(f"\n{Colors.GREEN}[+] Scan complete.{Colors.RESET}")
+        # ADDED: handle Ctrl+C and still print/write partial results
+        try:
+            await asyncio.gather(*tasks)
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            pass
+        except Exception as e:
+            await queue.put(LogEvent("plain", text=f"[ERR] Unhandled error: {e}", color=Colors.RED))
+
+    # Stop writer
+    await queue.put(None)
+    await writer_task
+
+    # ADDED: persist results regardless of completion
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    results_dir = os.path.join(base_dir, "results")
+    os.makedirs(results_dir, exist_ok=True)
+    json_path = os.path.join(results_dir, f"apibrute_results_{ts}.json")
+    txt_200 = os.path.join(results_dir, f"open_200_{ts}.txt")
+    txt_3xx = os.path.join(results_dir, f"redirects_3xx_{ts}.txt")
+    txt_4xx = os.path.join(results_dir, f"forbidden_401_403_{ts}.txt")
+
+    try:
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(results_acc, f, ensure_ascii=False, indent=2)
+        with open(txt_200, "w", encoding="utf-8") as f:
+            f.write("\n".join(results_acc["200"]) + ("\n" if results_acc["200"] else ""))
+        with open(txt_3xx, "w", encoding="utf-8") as f:
+            f.write("\n".join(results_acc["3xx"]) + ("\n" if results_acc["3xx"] else ""))
+        with open(txt_4xx, "w", encoding="utf-8") as f:
+            f.write("\n".join(results_acc["4xx_forbid"]) + ("\n" if results_acc["4xx_forbid"] else ""))
+        print(f"{Colors.CYAN}[i] Saved results: {json_path}{Colors.RESET}")
+    except Exception as e:
+        print(f"{Colors.RED}[ERR] Failed writing results: {e}{Colors.RESET}")
+
+    # Final Summary (skip Not Found)
+    if not results_acc["200"]:
+        print(f"\n{Colors.RED}[-] Scan complete.{Colors.RESET}\n")
+    else:
+        print(f"\n{Colors.GREEN}[+] Scan complete.{Colors.RESET}\n")
+
+    def section(title, items, color):
+        print(f"{color}{title}{Colors.RESET}")
+        if not items:
+            print(f"{Colors.RED}(none){Colors.RESET}")
+            return
+        for it in items:
+            print(f" - {it}")
+        print(f" Total: {len(items)}\n")
+
+    print(f"{Colors.CYAN}==== Results Summary (excluding Not Found) ===={Colors.RESET}")
+    section("Open (200):", results_acc["200"], Colors.GREEN)
+    section("Redirects (3xx):", results_acc["3xx"], Colors.CYAN)
+    section("Forbidden/Unauthorized (401/403):", results_acc["4xx_forbid"], Colors.YELLOW)
 
 if __name__ == "__main__":
-    log_usage(action , current_version)
     try:
-        # Run the main asynchronous function
         asyncio.run(main())
     except KeyboardInterrupt:
-        # Handle user interruption (Ctrl+C)
-        print(f"\n{Colors.YELLOW}[!] Scan interrupted by user.{Colors.RESET}")
-
+        # Suppress duplicate traceback; main already saves and prints
+        pass
