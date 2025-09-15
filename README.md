@@ -41,7 +41,7 @@ pip install colorama
 ### Main script
 ```bash
 cd ApiBrute
-python apibrute.py 
+python3 apibrute.py 
 ```
 `Then follow the on screen commands`
 
