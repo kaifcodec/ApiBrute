@@ -90,12 +90,38 @@ def expand_nouns(nouns, enable_plural=True):
     return sorted(out)
 
 def load_list_file(path):
+    """
+    Load a token file (one per line) and normalize tokens.
+
+    Normalization:
+      - strip whitespace
+      - remove leading/trailing slashes (so '/api' -> 'api', '///v1' -> 'v1')
+      - skip empty lines or lines that become empty after stripping
+
+    This prevents doubled/tripled slashes when the generator later does '/' + to_style(...)
+    """
     if not path:
         return []
     p = Path(path)
     if not p.exists():
         return []
-    return [x.strip() for x in p.read_text(encoding="utf-8", errors="ignore").splitlines() if x.strip()]
+
+    def normalize(tok: str) -> str:
+        if tok is None:
+            return ""
+        s = tok.strip()
+        # remove leading/trailing slashes (any number)
+        s = s.strip("/")
+        # collapse internal whitespace to single space (optional but useful)
+        s = re.sub(r"\s+", " ", s)
+        return s
+
+    lines = []
+    for raw in p.read_text(encoding="utf-8", errors="ignore").splitlines():
+        t = normalize(raw)
+        if t:  # skip empty tokens
+            lines.append(t)
+    return lines
 
 def prefix_has_version(pref: str) -> bool:
     pref = str(pref).strip().lower()
