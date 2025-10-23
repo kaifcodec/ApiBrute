@@ -90,16 +90,6 @@ def expand_nouns(nouns, enable_plural=True):
     return sorted(out)
 
 def load_list_file(path):
-    """
-    Load a token file (one per line) and normalize tokens.
-
-    Normalization:
-      - strip whitespace
-      - remove leading/trailing slashes (so '/api' -> 'api', '///v1' -> 'v1')
-      - skip empty lines or lines that become empty after stripping
-
-    This prevents doubled/tripled slashes when the generator later does '/' + to_style(...)
-    """
     if not path:
         return []
     p = Path(path)
@@ -110,9 +100,7 @@ def load_list_file(path):
         if tok is None:
             return ""
         s = tok.strip()
-        # remove leading/trailing slashes (any number)
         s = s.strip("/")
-        # collapse internal whitespace to single space (optional but useful)
         s = re.sub(r"\s+", " ", s)
         return s
 
@@ -262,3 +250,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
