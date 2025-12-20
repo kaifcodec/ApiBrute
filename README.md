@@ -7,7 +7,7 @@ Built for hackers, pentesters, and curious minds — by **kaifcodec**.
 
 ---
 
-## 🚀 Features
+## Features
 
 - ⚡ **Async-powered** — 10x faster than traditional scanners  
 - 📂 **Built-in wordlist** — zero setup needed  
@@ -22,7 +22,7 @@ httpx
 colorama
 ```
 
-## 📦 Install
+## Install
 
 ```bash
 pip install -r requirements.txt
@@ -36,7 +36,7 @@ pip install colorama
 ```
 ---
 
-## 🔧 Usage
+## Usage
 
 ### Main script
 ```bash
@@ -79,7 +79,7 @@ _Optional: Plug in your own wordlist · just modify the script._
 
 ---
 
-## 🐍 Example Output
+## Example Output
 
 ```
 [200] https://target.com/api/login
@@ -89,7 +89,7 @@ _Optional: Plug in your own wordlist · just modify the script._
 
 ---
 
-## ✨ Why?
+## Why?
 
 Because waiting is boring.  
 Because most scanners are too loud, too slow, or too bloated.  
@@ -97,7 +97,7 @@ This tool is fast, focused, and made for action.
 
 ---
 
-## 👨‍💻 Author
+## Author
 
 Created with focus & fire by **kaifcodec**  
 - ⚔️ GitHub: [github.com/kaifcodec](https://github.com/kaifcodec)

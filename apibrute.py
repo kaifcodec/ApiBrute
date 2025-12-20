@@ -28,8 +28,8 @@ HEADER = rf"""
     _          _   ____             _
    / \   _ __ (_) | __ ) _ __ _   _| |_ ___
   / _ \ | '_ \| | |  _ \| '__| | | | __/ _ \ Author: kaifcodec
- / ___ \| |_) | | | |_) | |  | |_| | ||  __/ Email: kaifcodec@gmail.com
-/_/   \_\ .__/|_| |____/|_|   \__,_|\__\___| Version: {current_version}
+ / ___ \| |_) | | | |_) | |  | |_| | ||  __/ Version: {current_version}
+/_/   \_\ .__/|_| |____/|_|   \__,_|\__\___|
         |_|
 {Colors.RESET}
 {Colors.GREEN}Simple Async HTTP Endpoint Scanner by "kaifcodec"{Colors.RESET}
