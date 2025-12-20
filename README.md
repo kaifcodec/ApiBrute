@@ -9,14 +9,14 @@ Built for hackers, pentesters, and curious minds — by **kaifcodec**.
 
 ## Features
 
-- ⚡ **Async-powered** — 10x faster than traditional scanners  
-- 📂 **Built-in wordlist** — zero setup needed  
-- 🎯 **Targets API & admin routes** effortlessly  
-- 🧠 **Minimal, readable code** — tweak it your way  
-- 💻 Works on **Linux, Windows, and Termux**
+-  **Async-powered** — 10x faster than traditional scanners  
+-  **Built-in wordlist** — zero setup needed  
+-  **Targets API & admin routes** effortlessly  
+-  **Minimal, readable code** — tweak it your way  
+-  Works on **Linux, Windows, and Termux**
 
 ---
-## 📦 Requirements (python packages)
+## Requirements (python packages)
 ```bash
 httpx
 colorama
@@ -97,13 +97,8 @@ This tool is fast, focused, and made for action.
 
 ---
 
-## Author
 
-Created with focus & fire by **kaifcodec**  
-- ⚔️ GitHub: [github.com/kaifcodec](https://github.com/kaifcodec)
-- ⚔️ Email: kaifcodec@gmail.com
----
+## License
 
-## 📜 License
+MIT — Use it. Fork it. Break stuff responsibly.
 
-MIT — Use it. Fork it. Break stuff responsibly. 😎
